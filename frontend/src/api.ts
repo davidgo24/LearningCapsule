@@ -11,10 +11,19 @@ async function parseErrorDetail(res: Response): Promise<string> {
   }
 }
 
-export async function extractCapsule(rawText: string): Promise<ExtractedCapsule> {
+export async function extractCapsule(
+  rawText: string,
+  options?: { geminiKey?: string },
+): Promise<ExtractedCapsule> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  }
+  const k = options?.geminiKey?.trim()
+  if (k) headers['X-Gemini-Key'] = k
+
   const res = await fetch('/api/extract', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({ raw_text: rawText }),
   })
   if (!res.ok) throw new Error(await parseErrorDetail(res))

@@ -1,19 +1,32 @@
 :root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #5b21b6;
-  --accent-hover: #6d28d9;
-  --danger: #b91c1c;
-  --surface: #fafafa;
-  --mono: ui-monospace, Consolas, 'SF Mono', monospace;
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --text: #6e6e73;
+  --text-h: #1d1d1f;
+  --bg: #f5f5f7;
+  --bg-elevated: #ffffff;
+  --border: rgba(0, 0, 0, 0.06);
+  --border-strong: rgba(0, 0, 0, 0.1);
+  --code-bg: rgba(0, 0, 0, 0.05);
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --danger: #ff3b30;
+  --success-bg: rgba(52, 199, 89, 0.14);
+  --success-text: #1d1d1f;
+  --error-bg: rgba(255, 59, 48, 0.11);
+  --chrome: rgba(118, 118, 128, 0.12);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sheet: 0 25px 80px rgba(0, 0, 0, 0.14);
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-full: 980px;
+
+  --mono: ui-monospace, 'SF Mono', 'Menlo', Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
 
   font-family: var(--sans);
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: 17px;
+  line-height: 1.47;
+  letter-spacing: -0.022em;
   color: var(--text);
   background: var(--bg);
   color-scheme: light dark;
@@ -21,15 +34,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #111827;
-    --border: #374151;
-    --code-bg: #1f2937;
-    --accent: #a78bfa;
-    --accent-hover: #c4b5fd;
-    --danger: #f87171;
-    --surface: #1f2937;
+    --text: #a1a1a6;
+    --text-h: #f5f5f7;
+    --bg: #000000;
+    --bg-elevated: #1c1c1e;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.12);
+    --code-bg: rgba(255, 255, 255, 0.06);
+    --accent: #0a84ff;
+    --accent-hover: #409cff;
+    --danger: #ff453a;
+    --success-bg: rgba(48, 209, 88, 0.16);
+    --success-text: #f5f5f7;
+    --error-bg: rgba(255, 69, 58, 0.14);
+    --chrome: rgba(118, 118, 128, 0.24);
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+    --shadow-sheet: 0 24px 80px rgba(0, 0, 0, 0.55);
   }
 }
 
@@ -39,13 +59,14 @@
 
 body {
   margin: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {
-  max-width: 1120px;
+  max-width: 42rem;
   margin: 0 auto;
   min-height: 100vh;
-  padding: 1.25rem 1rem 3rem;
+  padding: max(1.25rem, env(safe-area-inset-top)) 1.25rem max(2.5rem, env(safe-area-inset-bottom));
 }
 
 h1,
@@ -53,22 +74,38 @@ h2,
 h3 {
   color: var(--text-h);
   font-weight: 600;
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.35rem;
+  letter-spacing: -0.03em;
 }
 
 h1 {
-  font-size: 1.75rem;
+  font-size: 1.625rem;
+  line-height: 1.15;
 }
 
 h2 {
-  font-size: 1.15rem;
-  margin-top: 1.5rem;
+  font-size: 1.0625rem;
+  line-height: 1.25;
+  margin-top: 0;
+}
+
+h3 {
+  font-size: 1.0625rem;
 }
 
 code {
   font-family: var(--mono);
-  font-size: 0.9em;
+  font-size: 0.88em;
   background: var(--code-bg);
-  padding: 0.15em 0.35em;
-  border-radius: 4px;
+  padding: 0.12em 0.38em;
+  border-radius: 6px;
+  color: var(--text-h);
+}
+
+input:focus-visible,
+textarea:focus-visible,
+button:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }

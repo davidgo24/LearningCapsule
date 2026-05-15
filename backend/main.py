@@ -5,8 +5,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from typing import Annotated
+
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -37,10 +39,20 @@ app.add_middleware(
 )
 
 
+def _stripped_optional(s: str | None) -> str | None:
+    if s is None:
+        return None
+    t = s.strip()
+    return t or None
+
+
 @app.post("/api/extract", response_model=ExtractedCapsule)
-async def api_extract(body: ExtractRequest) -> ExtractedCapsule:
+async def api_extract(
+    body: ExtractRequest,
+    x_gemini_key: Annotated[str | None, Header(alias="X-Gemini-Key")] = None,
+) -> ExtractedCapsule:
     try:
-        return extract_from_chat(body.raw_text)
+        return extract_from_chat(body.raw_text, api_key=_stripped_optional(x_gemini_key))
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
     except RuntimeError as e:

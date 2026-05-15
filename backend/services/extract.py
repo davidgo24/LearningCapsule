@@ -27,7 +27,8 @@ def extract_from_chat(raw_text: str, *, api_key: str | None = None, model: str |
     key = api_key or os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
     if not key:
         raise ValueError(
-            "Missing API key. Set GEMINI_API_KEY in .env (see .env.example)."
+            "Missing API key. Paste your key in the app (bring-your-own-key) or configure "
+            "GEMINI_API_KEY on the server (see .env.example)."
         )
 
     model_id = model or os.environ.get("GEMINI_MODEL", DEFAULT_MODEL)

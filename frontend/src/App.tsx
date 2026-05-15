@@ -4,6 +4,11 @@ import './App.css'
 import { commitCapsule, extractCapsule, getCapsule, listCapsules } from './api'
 import type { CapsuleDocument, CapsulePayload, CapsuleSummary, ExtractedCapsule } from './types'
 
+/** localStorage — intro dismissed once per browser */
+const ONBOARDING_SEEN_KEY = 'learningcapsule_onboarding_seen'
+/** sessionStorage — Gemini BYOK key for this tab/session only */
+const SESSION_GEMINI_KEY = 'learningcapsule_session_gemini_key'
+
 function linesToArray(text: string): string[] {
   return text
     .split('\n')
@@ -24,6 +29,60 @@ function useDarkTheme(): boolean {
   return dark
 }
 
+function OnboardingTour({
+  onClose,
+}: {
+  onClose: () => void
+}) {
+  return (
+    <div
+      className="onboard-backdrop"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="onboard-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose()
+      }}
+    >
+      <div className="onboard-card" onClick={(e) => e.stopPropagation()}>
+        <h2 id="onboard-title">Here’s how it works</h2>
+        <p className="onboard-lead">
+          Short and sweet — skip if you’d rather poke around. You won’t see this again after you tap below (unless you open the
+          guide from the corner).
+        </p>
+        <ul>
+          <li>
+            <strong>Paste a chat,</strong> hit <strong>Shape into draft</strong>, then tidy what came back. Tags, snippets, notes —
+            it’s yours to edit.
+          </li>
+          <li>
+            <strong>Bring your own key</strong> if you want drafts on your dime. Leave it empty if whoever runs this server already
+            added one.
+          </li>
+          <li>
+            <strong>Say something for future-you,</strong> then hit <strong>Save capsule</strong>. Old sessions live under{' '}
+            <strong>Library</strong>.
+          </li>
+          <li>
+            On a shared link, everybody sees the same library — fair warning if it’s not just you on the couch.
+          </li>
+          <li>
+            Need a key? <code>aistudio.google.com/apikey</code>
+          </li>
+        </ul>
+        <div className="btn-row onboard-actions">
+          <button type="button" className="btn-secondary" onClick={onClose}>
+            Skip
+          </button>
+          <button type="button" className="btn-primary" onClick={onClose}>
+            Sounds good
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SnippetEditors({
   snippets,
   onChange,
@@ -37,17 +96,17 @@ function SnippetEditors({
 }) {
   return (
     <div className="snippet-grid">
-      {snippets.length === 0 && <p className="section-desc">No code snippets.</p>}
+      {snippets.length === 0 && <p className="section-desc">No code pulled out yet.</p>}
       {snippets.map((code, i) => (
         <div key={i} className="snippet-cell">
           <header>
-            <span>Snippet {i + 1}</span>
+            <span>Code {i + 1}</span>
             {!readOnly && onChange && (
               <button
                 type="button"
                 onClick={() => onChange(snippets.filter((_, j) => j !== i))}
               >
-                Remove
+                Remove block
               </button>
             )}
           </header>
@@ -77,7 +136,7 @@ function SnippetEditors({
       ))}
       {!readOnly && onChange && (
         <button type="button" className="btn-secondary" onClick={() => onChange([...snippets, ''])}>
-          Add snippet
+          Add another block
         </button>
       )}
     </div>
@@ -94,6 +153,14 @@ function CreateFlow({
   setSuccess: (s: string | null) => void
 }) {
   const [rawText, setRawText] = useState('')
+  const [geminiKey, setGeminiKey] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    try {
+      return sessionStorage.getItem(SESSION_GEMINI_KEY) ?? ''
+    } catch {
+      return ''
+    }
+  })
   const [draft, setDraft] = useState<ExtractedCapsule | null>(null)
   const [busy, setBusy] = useState(false)
   const [moduleLabel, setModuleLabel] = useState('')
@@ -104,6 +171,15 @@ function CreateFlow({
   const [keyTakeaway, setKeyTakeaway] = useState('')
   const [notesToSelf, setNotesToSelf] = useState('')
   const [struggles, setStruggles] = useState('')
+
+  useEffect(() => {
+    try {
+      if (geminiKey.trim()) sessionStorage.setItem(SESSION_GEMINI_KEY, geminiKey)
+      else sessionStorage.removeItem(SESSION_GEMINI_KEY)
+    } catch {
+      /* noop */
+    }
+  }, [geminiKey])
 
   const syncListsFromDraft = useCallback((d: ExtractedCapsule) => {
     setTagsInput(d.tags.join(', '))
@@ -116,12 +192,12 @@ function CreateFlow({
     setError(null)
     setSuccess(null)
     if (!rawText.trim()) {
-      setError('Paste or upload a chat export first.')
+      setError('Drop in some chat text first.')
       return
     }
     setBusy(true)
     try {
-      const ex = await extractCapsule(rawText)
+      const ex = await extractCapsule(rawText, { geminiKey: geminiKey.trim() || undefined })
       setDraft(ex)
       syncListsFromDraft(ex)
     } catch (e) {
@@ -156,7 +232,7 @@ function CreateFlow({
     setBusy(true)
     try {
       const res = await commitCapsule(payload)
-      setSuccess(`Saved capsule ${res.capsule_id} (${res.filename})`)
+      setSuccess(`Nice — saved. You’ll find it under Library. (${res.filename})`)
       setDraft(null)
       setRawText('')
       setModuleLabel('')
@@ -180,13 +256,27 @@ function CreateFlow({
   return (
     <div>
       <section className="section">
-        <h2>1. Import chat export</h2>
-        <p className="section-desc">
-          Paste raw text from a Gemini (or other) export, or load a <code>.txt</code> / <code>.md</code> file.
-        </p>
+        <h2 className="section-title">Start with the chat</h2>
+        <p className="section-desc">Paste the thread, or grab a file (.txt, .md, etc.).</p>
+        <div className="field">
+          <label htmlFor="gemini-key">Optional: your API key</label>
+          <p className="section-desc subtle">
+            Only sent when you shape a draft — never stored on this server. Keeps this browser tab only; close the tab and it’s
+            gone. Skip if the host already wired one up.
+          </p>
+          <input
+            id="gemini-key"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Your key, or leave empty"
+            value={geminiKey}
+            onChange={(e) => setGeminiKey(e.target.value)}
+          />
+        </div>
         <textarea
           className="raw-import"
-          placeholder="Paste chat export here…"
+          placeholder="Your chat goes here…"
           value={rawText}
           onChange={(e) => setRawText(e.target.value)}
         />
@@ -197,7 +287,7 @@ function CreateFlow({
             onChange={(e) => onFile(e.target.files?.[0])}
           />
           <button type="button" className="btn-primary" disabled={busy || !rawText.trim()} onClick={handleExtract}>
-            {busy ? 'Working…' : 'Extract with Gemini'}
+            {busy ? 'One moment…' : 'Shape into draft'}
           </button>
         </div>
       </section>
@@ -205,14 +295,15 @@ function CreateFlow({
       {draft && (
         <>
           <section className="section">
-            <h2>2. Validate organized data</h2>
+            <h2 className="section-title">Tidy the draft</h2>
+            <p className="section-desc">You know the session better than anyone — nudge anything that feels off.</p>
             <div className="field-row">
               <div className="field">
-                <label htmlFor="module">Module / course label</label>
+                <label htmlFor="module">Course / module</label>
                 <input
                   id="module"
                   type="text"
-                  placeholder="e.g. Boot.dev — Linked Lists"
+                  placeholder="e.g. Boot.dev — linked lists"
                   value={moduleLabel}
                   onChange={(e) => setModuleLabel(e.target.value)}
                 />
@@ -228,11 +319,11 @@ function CreateFlow({
               </div>
             </div>
             <div className="field">
-              <label htmlFor="tags">Tags (comma-separated)</label>
-              <input id="tags" type="text" value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} />
+              <label htmlFor="tags">Tags</label>
+              <input id="tags" type="text" placeholder="python, testing, …" value={tagsInput} onChange={(e) => setTagsInput(e.target.value)} />
             </div>
             <div className="field">
-              <label htmlFor="main">Main idea</label>
+              <label htmlFor="main">What it was about</label>
               <textarea id="main" rows={4} value={draft.main_idea} onChange={(e) => updateDraft({ main_idea: e.target.value })} />
             </div>
             <div className="field-row">
@@ -241,19 +332,19 @@ function CreateFlow({
                 <textarea id="questions" rows={6} value={questionsText} onChange={(e) => setQuestionsText(e.target.value)} />
               </div>
               <div className="field">
-                <label htmlFor="conclusions">My conclusions (one per line)</label>
+                <label htmlFor="conclusions">What clicked (one per line)</label>
                 <textarea id="conclusions" rows={6} value={conclusionsText} onChange={(e) => setConclusionsText(e.target.value)} />
               </div>
             </div>
             <div className="field">
-              <label htmlFor="commentary">User commentary from chat (one per line)</label>
+              <label htmlFor="commentary">Side notes from the chat</label>
               <textarea id="commentary" rows={4} value={commentaryText} onChange={(e) => setCommentaryText(e.target.value)} />
             </div>
           </section>
 
           <section className="section">
-            <h2>3. Code snippets</h2>
-            <p className="section-desc">Edit in place or add/remove blocks — displayed side by side.</p>
+            <h2 className="section-title">Code</h2>
+            <p className="section-desc">Edit in place, trim, or add blocks as you like.</p>
             <SnippetEditors
               dark={dark}
               readOnly={false}
@@ -263,28 +354,29 @@ function CreateFlow({
           </section>
 
           <section className="section">
-            <h2>4. Enrich — your voice</h2>
+            <h2 className="section-title">Your voice</h2>
+            <p className="section-desc">The part only you can write.</p>
             <div className="field">
-              <label htmlFor="takeaway">Key takeaway</label>
-              <textarea id="takeaway" rows={3} value={keyTakeaway} onChange={(e) => setKeyTakeaway(e.target.value)} />
+              <label htmlFor="takeaway">TL;DR</label>
+              <textarea id="takeaway" rows={3} placeholder="If you remembered one line…" value={keyTakeaway} onChange={(e) => setKeyTakeaway(e.target.value)} />
             </div>
             <div className="field">
-              <label htmlFor="notes">Notes to self</label>
-              <textarea id="notes" rows={3} value={notesToSelf} onChange={(e) => setNotesToSelf(e.target.value)} />
+              <label htmlFor="notes">Notes to future you</label>
+              <textarea id="notes" rows={3} placeholder="Anything you wish you’d written down sooner" value={notesToSelf} onChange={(e) => setNotesToSelf(e.target.value)} />
             </div>
             <div className="field">
-              <label htmlFor="struggles">Struggles / honest feedback</label>
-              <textarea id="struggles" rows={3} value={struggles} onChange={(e) => setStruggles(e.target.value)} />
+              <label htmlFor="struggles">What slowed you down</label>
+              <textarea id="struggles" rows={3} placeholder="Honesty welcome" value={struggles} onChange={(e) => setStruggles(e.target.value)} />
             </div>
             <button type="button" className="btn-primary" disabled={busy} onClick={handleCommit}>
-              Commit time capsule
+              Save capsule
             </button>
           </section>
         </>
       )}
 
       {!draft && (
-        <p className="section-desc loading-hint">Run extraction to unlock validation, snippets, and enrichment.</p>
+        <p className="section-desc loading-hint">Shape a draft first — then you can tweak and save.</p>
       )}
     </div>
   )
@@ -350,11 +442,11 @@ function ViewFlow({
     <div>
       <div className="btn-row">
         <button type="button" className="btn-secondary" onClick={refreshList} disabled={loading}>
-          Refresh list
+          Refresh
         </button>
       </div>
-      {loading && <p className="loading-hint">Loading…</p>}
-      {!loading && list.length === 0 && <p className="section-desc">No capsules yet — create one in the other tab.</p>}
+      {loading && <p className="loading-hint">Fetching…</p>}
+      {!loading && list.length === 0 && <p className="section-desc">Nothing saved yet — start something under New.</p>}
       {!loading && list.length > 0 && (
         <>
           <select
@@ -374,33 +466,33 @@ function ViewFlow({
               <div className="view-panel">
                 <h3>{displayDoc.title || '(untitled)'}</h3>
                 <dl>
-                  <dt>Capsule ID</dt>
+                  <dt>Id</dt>
                   <dd>{displayDoc.capsule_id}</dd>
-                  <dt>Date</dt>
+                  <dt>Calendar date</dt>
                   <dd>{displayDoc.date}</dd>
-                  <dt>Created</dt>
+                  <dt>Saved at</dt>
                   <dd>{displayDoc.created_at}</dd>
-                  <dt>Module</dt>
+                  <dt>Course</dt>
                   <dd>{displayDoc.module_label || '—'}</dd>
                   <dt>Tags</dt>
                   <dd>{displayDoc.tags.length ? displayDoc.tags.join(', ') : '—'}</dd>
-                  <dt>Main idea</dt>
+                  <dt>What it was about</dt>
                   <dd>{displayDoc.main_idea || '—'}</dd>
                   <dt>Questions</dt>
                   <dd>{displayDoc.questions.length ? displayDoc.questions.map((q, i) => `${i + 1}. ${q}`).join('\n') : '—'}</dd>
-                  <dt>My conclusions</dt>
+                  <dt>What clicked</dt>
                   <dd>{displayDoc.my_conclusions.length ? displayDoc.my_conclusions.join('\n') : '—'}</dd>
-                  <dt>Commentary</dt>
+                  <dt>Side notes</dt>
                   <dd>{displayDoc.user_commentary.length ? displayDoc.user_commentary.join('\n') : '—'}</dd>
-                  <dt>Key takeaway</dt>
+                  <dt>TL;DR</dt>
                   <dd>{displayDoc.key_takeaway || '—'}</dd>
-                  <dt>Notes to self</dt>
+                  <dt>Notes to future you</dt>
                   <dd>{displayDoc.notes_to_self || '—'}</dd>
-                  <dt>Struggles</dt>
+                  <dt>What was hard</dt>
                   <dd>{displayDoc.struggles_feedback || '—'}</dd>
                 </dl>
               </div>
-              <h2>Code snippets</h2>
+              <h2 className="section-title">Code</h2>
               <SnippetEditors dark={dark} readOnly snippets={displayDoc.code_snippets} />
             </>
           )}
@@ -415,23 +507,53 @@ export default function App() {
   const [mainTab, setMainTab] = useState<'create' | 'view'>('create')
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      return localStorage.getItem(ONBOARDING_SEEN_KEY) !== '1'
+    } catch {
+      return true
+    }
+  })
+
+  const closeOnboarding = () => {
+    try {
+      localStorage.setItem(ONBOARDING_SEEN_KEY, '1')
+    } catch {
+      /* noop */
+    }
+    setShowOnboarding(false)
+  }
+
+  const reopenGuide = () => {
+    setShowOnboarding(true)
+  }
 
   return (
     <>
+      {showOnboarding && <OnboardingTour onClose={closeOnboarding} />}
+
       <header className="app-header">
-        <h1>LearningCapsule</h1>
-        <p>
-          Import a chat export, extract structure with Gemini, validate and enrich, then commit a capsule you can reopen
-          later.
-        </p>
+        <div className="app-header-row">
+          <div className="app-header-text">
+            <h1>LearningCapsule</h1>
+            <p>
+              Turn a sprawling tutoring chat into a note you’ll actually open later — then file it away when you’re happy with
+              it.
+            </p>
+          </div>
+          <button type="button" className="btn-link" onClick={reopenGuide}>
+            Guide
+          </button>
+        </div>
       </header>
 
       <nav className="tabs">
         <button type="button" className={mainTab === 'create' ? 'active' : ''} onClick={() => setMainTab('create')}>
-          Create capsule
+          New
         </button>
         <button type="button" className={mainTab === 'view' ? 'active' : ''} onClick={() => setMainTab('view')}>
-          View capsules
+          Library
         </button>
       </nav>
 

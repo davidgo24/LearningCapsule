@@ -6,7 +6,18 @@ FastAPI backend (Gemini extraction + JSON capsules) and a Vite/React UI with Mon
 
 - Python 3.11+
 - Node.js 18+ (for the frontend dev server or production build)
-- A [Google AI Studio](https://aistudio.google.com/apikey) API key (`GEMINI_API_KEY`)
+- A [Google AI Studio](https://aistudio.google.com/apikey) API key: set **`GEMINI_API_KEY`** on the server **or** paste **your own key** in the app (BYOK header) when extracting.
+
+## First-time UX
+
+- A **welcome tour** runs once per browser until **Skip tour** / **Got it**. Dismissal is stored in **`localStorage`** (`learningcapsule_onboarding_seen`).
+- **Quick guide** in the header opens the tour again.
+
+## Bring your own Gemini key (BYOK)
+
+- **`POST /api/extract`** accepts optional **`X-Gemini-Key`**. When present, only that request uses your key (**not persisted** on the server).
+- In the UI, BYOK lives in session storage for that tab until you close the tab.
+- If unset, requests use **`GEMINI_API_KEY`** / `GOOGLE_API_KEY` from the server environment.
 
 ## Setup
 
@@ -64,7 +75,7 @@ The repo includes a root **`Dockerfile`** that builds the Vite app and runs Fast
 2. In [Railway](https://railway.app): **New Project** → **Deploy from GitHub** → select the repo.
 3. Railway should detect the Dockerfile automatically (single service).
 4. Under **Variables**, add:
-   - **`GEMINI_API_KEY`** — required  
+   - **`GEMINI_API_KEY`** — recommended (shared quota); omit only if everyone will paste **`X-Gemini-Key`** from their browser  
    - **`GEMINI_MODEL`** — optional (e.g. `gemini-2.5-flash`)  
    - **`CAPSULES_DIR`** — strongly recommended on Railway: e.g. `/data/capsules`  
 5. **Persistent disk:** create a **Volume**, mount it (for example) at **`/data`**, and set **`CAPSULES_DIR=/data/capsules`**. Without a volume, capsule JSON files can be **lost on redeploy**.
@@ -87,7 +98,7 @@ Then open `http://localhost:8000/`.
 
 | Method | Path | Description |
 |--------|------|--------------|
-| POST | `/api/extract` | Body: `{ "raw_text": "..." }` → structured extraction |
+| POST | `/api/extract` | Body: `{ "raw_text": "..." }`. Optional **`X-Gemini-Key`** header for BYOK; else uses server env key |
 | POST | `/api/capsules` | Body: capsule payload → saves JSON file |
 | GET | `/api/capsules` | List summaries |
 | GET | `/api/capsules/{capsule_id}` | Full capsule JSON |
